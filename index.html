@@ -260,7 +260,8 @@ function renderInbox(data){
 /* ---- Chat ---- */
 let peer=null,msgs=[],pending=[],shown=[],unread=0;
 const ck=()=>'vibe_m_'+me.name+'_'+peer.name;
-const countMine=t=>msgs.reduce((n,m)=>n+(m.from===me.name&&m.message===t?1:0),0);
+const isMine=m=>String(m.from)===String(me.name);
+const mineTotal=()=>msgs.reduce((n,m)=>n+(isMine(m)?1:0),0); // đếm theo tổng số tin của mình, không phụ thuộc kiểu dữ liệu (số/chuỗi)
 const nearBottom=()=>{const b=$('chatBox');return b.scrollHeight-b.scrollTop-b.clientHeight<120};
 function updUnread(){$('fab').innerHTML='⬇️'+(unread?`<b>${unread}</b>`:'');document.title=unread&&document.hidden?`(${unread}) ${TITLE}`:TITLE}
 function toBottom(){const b=$('chatBox');b.scrollTo({top:b.scrollHeight,behavior:'smooth'});unread=0;updUnread()}
@@ -277,7 +278,7 @@ async function syncMsgs(){
   if(p!==peer||!Array.isArray(data))return;
   const last=a=>a.length?a[a.length-1].message:null;
   if(data.length===msgs.length&&last(data)===last(msgs)){p.synced=true;return}
-  const fresh=p.synced?data.slice(msgs.length).filter(m=>m.from!==me.name):[];
+  const fresh=p.synced?data.slice(msgs.length).filter(m=>!isMine(m)):[];
   p.synced=true;if(data.length>msgs.length)boostUntil=Date.now()+15000;
   msgs=data;jset(ck(),data.slice(-100));renderChat();
   if(fresh.length){
@@ -296,8 +297,8 @@ function rowEl(r,anim){
   return d;
 }
 function renderChat(){
-  pending=pending.filter(x=>countMine(x.t)<=x.base);
-  const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+m.message,m,me:m.from===me.name}))
+  pending=pending.filter(x=>mineTotal()<x.n);
+  const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+m.message,m,me:isMine(m)}))
     .concat(pending.map((x,j)=>({k:(n+j)+'|'+me.name+'|'+x.t,m:{message:x.t},me:true,p:1})));
   const keys=rows.map(r=>r.k),box=$('chatBox'),near=nearBottom(),st=box.scrollTop;
   const append=shown.length<=keys.length&&shown.every((k,i)=>k===keys[i]),start=append?shown.length:0;
@@ -316,7 +317,7 @@ async function sendMsg(){
   i.value='';$('emojiPicker').style.display='none';
   const b=$('btnSend');b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
   const id='p'+Date.now()+Math.random();
-  pending.push({id,t:v,base:countMine(v)});renderChat();
+  pending.push({id,t:v,n:mineTotal()+pending.length+1});renderChat();
   if(EMO.test(v))burst(v.match(EM1)[0]);
   markSeen(peer.name,v);boostUntil=Date.now()+15000;
   try{

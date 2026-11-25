@@ -74,7 +74,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 .theme-dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .2s}
 .theme-dot:hover{transform:scale(1.25)}.theme-dot.sel{border-color:#fff}
 #pageSettings{overflow-y:auto}
-.bubble.pic{padding:4px}
+.bubble.hasimg{padding:4px}
 .pic{display:block;max-width:240px;max-height:300px;min-width:90px;min-height:70px;border-radius:14px;cursor:zoom-in;background:#ffffff14;object-fit:cover}
 .stage{display:none;padding:8px 16px;background:#000c;align-items:center;gap:10px;animation:pop .25s}
 .stage img{height:64px;border-radius:10px}
@@ -216,6 +216,18 @@ let staged=null;
 function compress(f){return new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{URL.revokeObjectURL(u);const k=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.78))};im.onerror=no;im.src=u})}
 async function handleImage(f){if(!f||!/^image\//.test(f.type))return;try{staged=await compress(f);$('stageImg').src=staged;$('imgStage').style.display='flex'}catch{alert('Không đọc được ảnh này')}}
 function clearStage(){staged=null;$('imgStage').style.display='none'}
+/* Thử lần lượt: link ảnh Google -> thumbnail Drive -> lấy qua script (base64) */
+function loadImg(im,id){
+  const u=['https://lh3.googleusercontent.com/d/'+id+'=w800','https://drive.google.com/thumbnail?id='+id+'&sz=w800'];let i=0;
+  im.onerror=async()=>{
+    if(++i<u.length){im.src=u[i];return}
+    im.onerror=null;
+    const PH='data:image/svg+xml,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='170' height='90'><rect width='100%' height='100%' rx='12' fill='#222'/><text x='85' y='52' fill='#aaa' font-size='13' text-anchor='middle'>🖼️ Không tải được ảnh</text></svg>");
+    try{const d=await api({action:'img',id},25000);im.src=d&&d.ok?'data:'+d.mime+';base64,'+d.data:PH}catch{im.src=PH}
+  };
+  im.src=u[0];
+}
+function showErr(t){showToast('⚠️ Lỗi','⚠️',t);$('toast').onclick=()=>$('toast').style.display='none'}
 function openLb(src){$('lbImg').src=src;$('lb').style.display='grid'}
 /* ---- Thông báo: toast trong app + thông báo hệ thống khi tab bị ẩn ---- */
 let toastT;
@@ -260,7 +272,7 @@ window.onload=()=>{
   $('msgInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();sendMsg()}});
   $('btnSend').addEventListener('pointerdown',e=>e.preventDefault());
   $('btnSend').addEventListener('click',sendMsg);
-  $('chatBox').addEventListener('click',e=>{const t=e.target;if(t.classList.contains('tr-btn'))doTrans(t);else if(t.classList.contains('pic')&&t.src)openLb(t.src.replace('sz=w800','sz=w1600'))});
+  $('chatBox').addEventListener('click',e=>{const t=e.target;if(t.classList.contains('tr-btn'))doTrans(t);else if(t.classList.contains('pic')&&t.src)openLb((t.src.startsWith('http')?t.src.replace('w800','w1600'):t.src))});
   $('chatBox').addEventListener('load',e=>{const b=$('chatBox'),t=e.target;if(t.tagName==='IMG'&&b.scrollHeight-b.scrollTop-b.clientHeight-t.offsetHeight<150)b.scrollTop=b.scrollHeight},true);
   document.addEventListener('paste',e=>{if(!inChat)return;const cd=e.clipboardData;if(!cd)return;const f=[...(cd.files||[])].find(x=>x.type.startsWith('image/'))||[...(cd.items||[])].filter(x=>x.kind==='file'&&x.type.startsWith('image/')).map(x=>x.getAsFile())[0];if(f){e.preventDefault();handleImage(f)}});
   $('imgFile').onchange=e=>{handleImage(e.target.files[0]);e.target.value=''};
@@ -355,14 +367,14 @@ function rowEl(r,anim){
   const d=document.createElement('div'),m=String(r.m.message),isImg=IMG.test(m);
   d.className='row '+(r.me?'me':'other')+(anim?' new':'');
   const big=!isImg&&EMO.test(m.trim());
-  d.innerHTML=`<div class="bubble ${r.me?'b-me':'b-other'}${r.p?' pending':''}${big?' big':''}${isImg?' pic':''}">${isImg?(r.img||m.length>5?'<img class="pic" alt="📷">':'📷 Hình ảnh (script chưa hỗ trợ ảnh)'):esc(m)}</div>`+(r.p?'<div class="meta">🕓 đang gửi...</div>':'');
-  const im=d.querySelector('img');if(im)im.src=r.img||'https://drive.google.com/thumbnail?id='+encodeURIComponent(m.slice(5))+'&sz=w800';
+  d.innerHTML=`<div class="bubble ${r.me?'b-me':'b-other'}${r.p?' pending':''}${big?' big':''}${isImg?' hasimg':''}">${isImg?(r.img||m.length>5?'<img class="pic" alt="📷">':'📷 Hình ảnh (script chưa hỗ trợ ảnh)'):esc(m)}</div>`+(r.p?'<div class="meta">🕓 đang gửi...</div>':'');
+  const im=d.querySelector('img');if(im){if(r.img)im.src=r.img;else loadImg(im,encodeURIComponent(m.slice(5)))}
   if(r.p)d.dataset.p=1;
   if(!r.me&&!r.p&&!big&&!isImg&&!VI.test(m)){d.insertAdjacentHTML('beforeend','<div class="tr-btn">✨ Dịch nhanh</div><div class="tr-out"></div>');d.dataset.t=m}
   return d;
 }
 function renderChat(){
-  pending=pending.filter(x=>mineTotal()<x.n);
+  pending=pending.filter(x=>mineTotal()<x.n&&Date.now()-x.t0<60000);
   const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+(IMG.test(String(m.message))?'img':m.message),m,me:isMine(m)}))
     .concat(pending.map((x,j)=>({k:(n+j)+'|'+me.name+'|'+(IMG.test(x.t)?'img':x.t),m:{message:x.t},me:true,p:1,img:x.img})));
   const keys=rows.map(r=>r.k),box=$('chatBox'),near=nearBottom(),st=box.scrollTop;
@@ -388,13 +400,24 @@ async function sendMsg(){
 }
 async function sendOne(text,img,i){
   const id='p'+Date.now()+Math.random();
-  pending.push({id,t:text,img,n:mineTotal()+pending.length+1});renderChat();
+  pending.push({id,t:text,img,n:mineTotal()+pending.length+1,t0:Date.now()});renderChat();
   if(!img&&EMO.test(text))burst(text.match(EM1)[0]);
   markSeen(peer.name,text);boostUntil=Date.now()+15000;
+  const body=JSON.stringify({action:'send',from:me.name,to:peer.name,message:text,avatar:me.avatar,...(img?{image:img}:{})});
+  let fail=null;
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',keepalive:!img,body:JSON.stringify({action:'send',from:me.name,to:peer.name,message:text,avatar:me.avatar,...(img?{image:img}:{})})});
-    setNet(true);wake();
-  }catch{setNet(false);pending=pending.filter(x=>x.id!==id);shown=[];renderChat();if(!img)i.value=text}
+    if(img){ // gửi ảnh: đọc phản hồi để biết Google Drive nhận được chưa
+      try{
+        const r=await fetch(API,{method:'POST',body}),t=await r.text();let d=null;try{d=JSON.parse(t)}catch{}
+        if(d&&d.ok===false)fail=d.msg||'Server từ chối ảnh';
+        else if(!d)fail=/authori|permission|quyền/i.test(t)?'Script chưa được cấp quyền Drive (chạy hàm setup rồi triển khai Phiên bản mới)':'Server trả về trang lỗi — hãy kiểm tra đã dán Code.gs mới và triển khai Phiên bản mới chưa';
+      }catch{if(!navigator.onLine)fail='Mất kết nối mạng'}
+    }else await fetch(API,{method:'POST',mode:'no-cors',keepalive:true,body});
+    setNet(true);
+  }catch{setNet(false);fail='Mất kết nối mạng'}
+  if(fail){pending=pending.filter(x=>x.id!==id);shown=[];renderChat();if(img)showErr('Gửi ảnh không được: '+fail);else i.value=text;return}
+  wake();
+  if(img)setTimeout(()=>{if(pending.some(x=>x.id===id)){pending=pending.filter(x=>x.id!==id);shown=[];renderChat();showErr('Ảnh chưa lên được server nên không lưu. Kiểm tra Code.gs đã triển khai Phiên bản mới và đã chạy setup chưa.')}},15000);
 }
 async function doTrans(btn){
   const out=btn.nextElementSibling,t=btn.parentElement.dataset.t;

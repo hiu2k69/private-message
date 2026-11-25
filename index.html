@@ -156,7 +156,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 <div id="loader">🚀 ĐANG KẾT NỐI...</div>
 
 <script>
-const API="https://script.google.com/macros/s/AKfycbzmNaVvUtPtvzW9WRbplnbh371-VlpziSlsuhzwn2BE9n7NQ-ZZV7f7Ysr0ZOcnPRxf/exec";
+const API="https://script.google.com/macros/s/AKfycbzX74jgEtayj7S1jrJqTZoKPa_upAXLRdMzVEpyVrsqQbehCSLSh2pLHnU_nD4H4HIp/exec";
 const $=id=>document.getElementById(id), TITLE="VibeChat | AnhBaTalk";
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const jget=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
@@ -190,7 +190,7 @@ function startLoop(fn,fast,slow){
   (async()=>{while(id===loopId){
     try{await fn()}catch(e){}
     if(id!==loopId)break;
-    await sleep(document.hidden||failN>2?6000:Date.now()<boostUntil?fast:slow);
+    await sleep(failN>2?6000:document.hidden?4000:Date.now()<boostUntil?fast:slow);
   }})();
 }
 const stopLoop=()=>{loopId++;wake()};
@@ -252,7 +252,7 @@ function notifyMsg(name,av,text){
 }
 function updNotifBtn(){
   const b=$('btnNotif');if(!b)return;
-  b.textContent=!('Notification'in window)?'🚫 Trình duyệt không hỗ trợ':Notification.permission==='granted'?'✅ Thông báo đã bật':Notification.permission==='denied'?'🚫 Đã chặn (bật lại trong cài đặt trình duyệt)':'🔔 Bật thông báo';
+  b.textContent=!('Notification'in window)?'🚫 Trình duyệt không hỗ trợ':!window.isSecureContext?'🚫 Cần mở bằng https mới có thông báo':Notification.permission==='granted'?'✅ Thông báo đã bật':Notification.permission==='denied'?'🚫 Đã chặn (bật lại trong cài đặt trình duyệt)':'🔔 Bật thông báo';
 }
 function askNotif(){if('Notification'in window)Notification.requestPermission().then(updNotifBtn);else updNotifBtn()}
 function toggleSound(){soundOn=!soundOn;jset('vibe_snd',soundOn);$('snd').textContent=soundOn?'🔔':'🔕'}
@@ -290,7 +290,8 @@ function changePage(id){
   if(id==='settings'&&me){setAv(me.avatar||selectedAv);$('avCustom').value='';$('newName').value=''}
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   $('page'+id[0].toUpperCase()+id.slice(1)).classList.add('active');
-  if(id==='inbox'){inboxSig='';renderInbox(jget('vibe_inbox',inboxData));startLoop(loadInbox,3000,3000)}
+  if(id==='inbox'){inboxSig='';renderInbox(jget('vibe_inbox',inboxData))}
+  if(id==='inbox'||id==='settings')startLoop(loadInbox,3000,3000);   // ở Cài đặt vẫn nhận thông báo
 }
 
 /* ---- Đăng nhập / hồ sơ ---- */
@@ -323,11 +324,23 @@ function toggleEmoji(){const p=$('emojiPicker');p.style.display=p.style.display=
 /* ---- Inbox (chấm chưa đọc, tìm kiếm, skeleton) ---- */
 let inboxData=[],inboxSig='';
 const markSeen=(n,m)=>{const s=jget('vibe_seen',{});if(s[n]!==m){s[n]=m;jset('vibe_seen',s)}};
+let inFail=0;
 async function loadInbox(){
-  const data=await api({action:'contacts',user:me.name});if(!Array.isArray(data))return;
+  let data;
+  try{data=await api({action:'contacts',user:me.name})}
+  catch(e){if(++inFail===3)showErr('Không kết nối được server nên chưa nhận được tin mới. App sẽ tự thử lại.',6000);throw e}
+  if(!Array.isArray(data))return;
+  inFail=0;
   const first=localStorage.getItem('vibe_seen')===null,seen=jget('vibe_seen',{}),prev=inboxData;
   if(first){data.forEach(c=>{if(c.lastMsg)seen[c.name]=c.lastMsg});jset('vibe_seen',seen)}
-  else if(prev.length)data.forEach(c=>{const o=prev.find(x=>x.name===c.name);if(o&&c.name!==me.name&&o.lastMsg!==c.lastMsg&&c.lastMsg!==seen[c.name]&&!(inChat&&peer&&peer.name===c.name))notifyMsg(c.name,c.avatar,c.lastMsg)});
+  else if(prev.length)data.forEach(c=>{
+    const o=prev.find(x=>x.name===c.name);
+    if(!o||c.name===me.name||(inChat&&peer&&peer.name===c.name))return;
+    // Dùng mốc thời gian + người gửi cuối (script mới): báo cả khi 2 tin trùng nội dung, và không báo tin do chính mình gửi
+    const hasTs=c.lastTs!==undefined&&c.lastFrom!==undefined;
+    const isNew=hasTs?(o.lastTs!==undefined&&Number(c.lastTs)>Number(o.lastTs)&&String(c.lastFrom)===String(c.name)):(o.lastMsg!==c.lastMsg&&c.lastMsg!==seen[c.name]);
+    if(isNew)notifyMsg(c.name,c.avatar,c.lastMsg);
+  });
   jset('vibe_inbox',data);renderInbox(data);
 }
 function renderInbox(data){

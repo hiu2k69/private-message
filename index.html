@@ -190,7 +190,7 @@ function startLoop(fn,fast,slow){
   (async()=>{while(id===loopId){
     try{await fn()}catch(e){}
     if(id!==loopId)break;
-    await sleep(document.hidden?6000:Date.now()<boostUntil?fast:slow);
+    await sleep(document.hidden||failN>2?6000:Date.now()<boostUntil?fast:slow);
   }})();
 }
 const stopLoop=()=>{loopId++;wake()};
@@ -351,11 +351,16 @@ function openChat(name,av){
   $('chatBox').innerHTML='';$('peerName').textContent=name;$('peerAv').textContent=av||'👤';
   changePage('chat');renderChat();
   boostUntil=Date.now()+10000;
-  startLoop(syncMsgs,400,1200);beat();           // 0.4s khi đang sôi nổi, 1.2s khi yên
+  startLoop(syncMsgs,700,2000);beat();           // 0.4s khi đang sôi nổi, 1.2s khi yên
 }
+let failN=0;
 async function syncMsgs(){
-  const p=peer,data=await api({action:'messages',user:me.name,peer:p.name,since:msgs.length});
-  if(p!==peer||!Array.isArray(data))return;
+  const p=peer;let data;
+  try{data=await api({action:'messages',user:me.name,peer:p.name})}
+  catch(e){if(++failN===3)showErr('Không tải được tin nhắn: server không phản hồi đúng (script lỗi hoặc hết hạn mức Google). App sẽ thử lại chậm hơn.',9000);throw e}
+  if(p!==peer)return;
+  if(!Array.isArray(data)){if(++failN===3)showErr('Không tải được tin nhắn: '+((data&&data.msg)||'server trả dữ liệu lạ'),10000);return}
+  failN=0;
   const last=a=>a.length?a[a.length-1].message:null;
   if(data.length===msgs.length&&last(data)===last(msgs)){p.synced=true;return}
   const fresh=p.synced?data.slice(msgs.length).filter(m=>!isMine(m)):[];

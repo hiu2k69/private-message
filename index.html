@@ -74,6 +74,12 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 .theme-dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .2s}
 .theme-dot:hover{transform:scale(1.25)}.theme-dot.sel{border-color:#fff}
 #pageSettings{overflow-y:auto}
+.bubble.pic{padding:4px}
+.pic{display:block;max-width:240px;max-height:300px;min-width:90px;min-height:70px;border-radius:14px;cursor:zoom-in;background:#ffffff14;object-fit:cover}
+.stage{display:none;padding:8px 16px;background:#000c;align-items:center;gap:10px;animation:pop .25s}
+.stage img{height:64px;border-radius:10px}
+#lb{position:fixed;inset:0;background:#000d;z-index:400;display:none;place-items:center;animation:fade .2s;cursor:zoom-out}
+#lb img{max-width:94%;max-height:90%;border-radius:12px}
 .av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px;max-height:180px;overflow-y:auto;margin-bottom:12px;padding:4px}
 .avp{font-size:26px;height:44px;display:grid;place-items:center;border-radius:12px;cursor:pointer;background:#ffffff0d;border:2px solid transparent;transition:transform .2s}
 .avp:hover{transform:scale(1.2) rotate(-6deg)}.avp:active{transform:scale(.85)}
@@ -85,7 +91,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 </head>
 <body>
 <div class="universe" id="universe"></div>
-<div id="fxLayer"></div><div id="toast"></div>
+<div id="fxLayer"></div><div id="toast"></div><div id="lb" onclick="this.style.display='none'"><img id="lbImg" alt=""></div>
 <div id="splash"><div class="welcome-text" id="welcomeTxt"></div><div id="eye" class="bob" style="font-size:60px;margin-top:15px">😎</div></div>
 
 <div class="app-shell">
@@ -138,8 +144,10 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
     <div id="chatBox" class="chat-scroll"></div>
     <button id="fab" onclick="toBottom()">⬇️</button>
     <div id="emojiPicker"></div>
+    <div class="stage" id="imgStage"><img id="stageImg" alt=""><span style="flex:1;font-size:12px;color:#aaa">Ảnh sẽ được gửi cùng tin nhắn</span><span class="ic" style="font-size:20px" onclick="clearStage()">✕</span></div>
     <div class="chat-footer">
       <span class="ic" style="font-size:26px" onclick="toggleEmoji()">😊</span>
+      <span class="ic" style="font-size:24px" onclick="$('imgFile').click()">📷</span><input type="file" id="imgFile" accept="image/*" hidden>
       <input type="text" id="msgInput" class="input-box" style="margin:0;flex:1" placeholder="Gửi tin nhắn..." autocomplete="off">
       <button class="btn-glow" id="btnSend" style="width:55px;padding:12px"><span>🚀</span></button>
     </div>
@@ -202,6 +210,13 @@ function burst(e){
     s.onanimationend=()=>s.remove();f.appendChild(s)}
   $('fxLayer').appendChild(f);
 }
+/* ---- Hình ảnh: nén bằng canvas, server lưu vào Drive, tin nhắn chỉ chứa [img]ID ---- */
+const IMG=/^\[img\]/,pretty=m=>IMG.test(String(m))?'📷 Hình ảnh':m;
+let staged=null;
+function compress(f){return new Promise((ok,no)=>{const u=URL.createObjectURL(f),im=new Image();im.onload=()=>{URL.revokeObjectURL(u);const k=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.78))};im.onerror=no;im.src=u})}
+async function handleImage(f){if(!f||!/^image\//.test(f.type))return;try{staged=await compress(f);$('stageImg').src=staged;$('imgStage').style.display='flex'}catch{alert('Không đọc được ảnh này')}}
+function clearStage(){staged=null;$('imgStage').style.display='none'}
+function openLb(src){$('lbImg').src=src;$('lb').style.display='grid'}
 /* ---- Thông báo: toast trong app + thông báo hệ thống khi tab bị ẩn ---- */
 let toastT;
 function showToast(n,av,t){
@@ -211,7 +226,7 @@ function showToast(n,av,t){
   clearTimeout(toastT);toastT=setTimeout(()=>el.style.display='none',4500);
 }
 function notifyMsg(name,av,text){
-  ping();text=String(text).slice(0,120);
+  ping();text=pretty(String(text)).slice(0,120);
   if(document.hidden){
     if('Notification'in window&&Notification.permission==='granted')try{
       const n=new Notification('💬 '+name,{body:text,tag:'vibe_'+name,renotify:true,icon:'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>${av||'💬'}</text></svg>`)});
@@ -245,7 +260,12 @@ window.onload=()=>{
   $('msgInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();sendMsg()}});
   $('btnSend').addEventListener('pointerdown',e=>e.preventDefault());
   $('btnSend').addEventListener('click',sendMsg);
-  $('chatBox').addEventListener('click',e=>{if(e.target.classList.contains('tr-btn'))doTrans(e.target)});
+  $('chatBox').addEventListener('click',e=>{const t=e.target;if(t.classList.contains('tr-btn'))doTrans(t);else if(t.classList.contains('pic')&&t.src)openLb(t.src.replace('sz=w800','sz=w1600'))});
+  $('chatBox').addEventListener('load',e=>{const b=$('chatBox'),t=e.target;if(t.tagName==='IMG'&&b.scrollHeight-b.scrollTop-b.clientHeight-t.offsetHeight<150)b.scrollTop=b.scrollHeight},true);
+  document.addEventListener('paste',e=>{if(!inChat)return;const cd=e.clipboardData;if(!cd)return;const f=[...(cd.files||[])].find(x=>x.type.startsWith('image/'))||[...(cd.items||[])].filter(x=>x.kind==='file'&&x.type.startsWith('image/')).map(x=>x.getAsFile())[0];if(f){e.preventDefault();handleImage(f)}});
+  $('imgFile').onchange=e=>{handleImage(e.target.files[0]);e.target.value=''};
+  $('chatBox').addEventListener('dragover',e=>e.preventDefault());
+  $('chatBox').addEventListener('drop',e=>{e.preventDefault();handleImage(e.dataTransfer.files[0])});
   $('chatBox').addEventListener('scroll',()=>{const n=nearBottom();$('fab').style.display=n?'none':'block';if(n&&unread){unread=0;updUnread()}},{passive:true});
   $('inboxList').addEventListener('click',e=>{const el=e.target.closest('.ib');if(el)openChat(el.dataset.name,el.dataset.av)});
 };
@@ -298,7 +318,7 @@ function renderInbox(data){
   inboxData=data;const q=$('q').value.trim().toLowerCase(),seen=jget('vibe_seen',{});
   const list=data.filter(c=>c.name!==me.name&&c.lastMsg&&String(c.name).toLowerCase().includes(q));
   const sig=JSON.stringify([list,seen,q]);if(sig===inboxSig)return;inboxSig=sig;
-  $('inboxList').innerHTML=list.length?list.map(c=>`<div class="ib" data-name="${esc(c.name)}" data-av="${esc(c.avatar||'')}"><div class="av">${esc(c.avatar||'👤')}</div><div style="flex:1;min-width:0"><b>${esc(c.name)}</b><p style="font-size:12px;color:${c.lastMsg!==seen[c.name]?'#fff':'#888'};margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.lastMsg)}</p></div>${c.lastMsg!==seen[c.name]?'<span class="dot"></span>':''}</div>`).join(''):'<div class="empty"><div class="bob" style="font-size:40px">🪐</div>Chưa có cuộc trò chuyện nào.<br>Bấm ➕ để nhắn tin mới</div>';
+  $('inboxList').innerHTML=list.length?list.map(c=>`<div class="ib" data-name="${esc(c.name)}" data-av="${esc(c.avatar||'')}"><div class="av">${esc(c.avatar||'👤')}</div><div style="flex:1;min-width:0"><b>${esc(c.name)}</b><p style="font-size:12px;color:${c.lastMsg!==seen[c.name]?'#fff':'#888'};margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pretty(c.lastMsg))}</p></div>${c.lastMsg!==seen[c.name]?'<span class="dot"></span>':''}</div>`).join(''):'<div class="empty"><div class="bob" style="font-size:40px">🪐</div>Chưa có cuộc trò chuyện nào.<br>Bấm ➕ để nhắn tin mới</div>';
 }
 
 /* ---- Chat ---- */
@@ -332,18 +352,19 @@ async function syncMsgs(){
   }
 }
 function rowEl(r,anim){
-  const d=document.createElement('div'),m=String(r.m.message);
+  const d=document.createElement('div'),m=String(r.m.message),isImg=IMG.test(m);
   d.className='row '+(r.me?'me':'other')+(anim?' new':'');
-  const big=EMO.test(m.trim());
-  d.innerHTML=`<div class="bubble ${r.me?'b-me':'b-other'}${r.p?' pending':''}${big?' big':''}">${esc(m)}</div>`+(r.p?'<div class="meta">🕓 đang gửi...</div>':'');
+  const big=!isImg&&EMO.test(m.trim());
+  d.innerHTML=`<div class="bubble ${r.me?'b-me':'b-other'}${r.p?' pending':''}${big?' big':''}${isImg?' pic':''}">${isImg?(r.img||m.length>5?'<img class="pic" alt="📷">':'📷 Hình ảnh (script chưa hỗ trợ ảnh)'):esc(m)}</div>`+(r.p?'<div class="meta">🕓 đang gửi...</div>':'');
+  const im=d.querySelector('img');if(im)im.src=r.img||'https://drive.google.com/thumbnail?id='+encodeURIComponent(m.slice(5))+'&sz=w800';
   if(r.p)d.dataset.p=1;
-  if(!r.me&&!r.p&&!big&&!VI.test(m)){d.insertAdjacentHTML('beforeend','<div class="tr-btn">✨ Dịch nhanh</div><div class="tr-out"></div>');d.dataset.t=m}
+  if(!r.me&&!r.p&&!big&&!isImg&&!VI.test(m)){d.insertAdjacentHTML('beforeend','<div class="tr-btn">✨ Dịch nhanh</div><div class="tr-out"></div>');d.dataset.t=m}
   return d;
 }
 function renderChat(){
   pending=pending.filter(x=>mineTotal()<x.n);
-  const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+m.message,m,me:isMine(m)}))
-    .concat(pending.map((x,j)=>({k:(n+j)+'|'+me.name+'|'+x.t,m:{message:x.t},me:true,p:1})));
+  const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+(IMG.test(String(m.message))?'img':m.message),m,me:isMine(m)}))
+    .concat(pending.map((x,j)=>({k:(n+j)+'|'+me.name+'|'+(IMG.test(x.t)?'img':x.t),m:{message:x.t},me:true,p:1,img:x.img})));
   const keys=rows.map(r=>r.k),box=$('chatBox'),near=nearBottom(),st=box.scrollTop;
   const append=shown.length<=keys.length&&shown.every((k,i)=>k===keys[i]),start=append?shown.length:0;
   // tin "đang gửi" đã lên server: bỏ mờ, không vẽ lại
@@ -357,18 +378,23 @@ function renderChat(){
   if(n)markSeen(peer.name,String(msgs[n-1].message));
 }
 async function sendMsg(){
-  const i=$('msgInput'),v=i.value.trim();if(!v||!peer)return;
-  i.value='';$('emojiPicker').style.display='none';
+  const i=$('msgInput'),v=i.value.trim(),img=staged;
+  if((!v&&!img)||!peer)return;
+  i.value='';clearStage();$('emojiPicker').style.display='none';
   if('Notification'in window&&Notification.permission==='default')Notification.requestPermission().then(updNotifBtn);
   const b=$('btnSend');b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
+  if(img)await sendOne('[img]',img,i);
+  if(v)await sendOne(v,null,i);
+}
+async function sendOne(text,img,i){
   const id='p'+Date.now()+Math.random();
-  pending.push({id,t:v,n:mineTotal()+pending.length+1});renderChat();
-  if(EMO.test(v))burst(v.match(EM1)[0]);
-  markSeen(peer.name,v);boostUntil=Date.now()+15000;
+  pending.push({id,t:text,img,n:mineTotal()+pending.length+1});renderChat();
+  if(!img&&EMO.test(text))burst(text.match(EM1)[0]);
+  markSeen(peer.name,text);boostUntil=Date.now()+15000;
   try{
-    await fetch(API,{method:'POST',mode:'no-cors',keepalive:true,body:JSON.stringify({action:'send',from:me.name,to:peer.name,message:v,avatar:me.avatar})});
+    await fetch(API,{method:'POST',mode:'no-cors',keepalive:!img,body:JSON.stringify({action:'send',from:me.name,to:peer.name,message:text,avatar:me.avatar,...(img?{image:img}:{})})});
     setNet(true);wake();
-  }catch{setNet(false);pending=pending.filter(x=>x.id!==id);shown=[];renderChat();i.value=v}
+  }catch{setNet(false);pending=pending.filter(x=>x.id!==id);shown=[];renderChat();if(!img)i.value=text}
 }
 async function doTrans(btn){
   const out=btn.nextElementSibling,t=btn.parentElement.dataset.t;

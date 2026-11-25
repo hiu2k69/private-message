@@ -1,383 +1,335 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>VibeChat | AnhBaTalk</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #00f2fe; --accent: #ffcc00; --bg: #020205;
-            --glass: rgba(255, 255, 255, 0.08); --border: rgba(255, 255, 255, 0.12);
-            --safe-top: env(safe-area-inset-top);
-            --safe-bottom: env(safe-area-inset-bottom);
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
-        
-        /* Chống cuộn toàn trang để tạo cảm giác App native */
-        body { 
-            background: var(--bg); 
-            color: #fff; 
-            height: 100dvh; 
-            overflow: hidden; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        /* --- VŨ TRỤ BACKGROUND --- */
-        .universe {
-            position: fixed; inset: 0; z-index: -1;
-            background: radial-gradient(circle at 50% 50%, #0d1117 0%, #020205 100%);
-        }
-        .star { position: absolute; background: white; border-radius: 50%; opacity: 0.5; animation: twinkle var(--d) infinite; }
-        @keyframes twinkle { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
-
-        /* --- VỎ BỌC APP (RESPONSIVE CHÍNH) --- */
-        .app-shell { 
-            width: 100%; 
-            max-width: 500px; /* Chiều rộng tối đa trên PC */
-            height: 100dvh; 
-            position: relative; 
-            background: rgba(10, 10, 15, 0.7);
-            backdrop-filter: blur(20px);
-            border-left: 1px solid var(--border); 
-            border-right: 1px solid var(--border);
-            display: flex; 
-            flex-direction: column;
-            box-shadow: 0 0 100px rgba(0,0,0,0.8);
-        }
-
-        /* Media Query cho màn hình lớn (Desktop) */
-        @media (min-width: 768px) {
-            .app-shell {
-                height: 90vh;
-                border-radius: 30px;
-                border: 1px solid var(--border);
-            }
-            body { background: #000; } /* Nền ngoài tối hơn trên PC */
-        }
-
-        /* --- SPLASH SCREEN --- */
-        #splash {
-            position: fixed; inset: 0; background: var(--bg); z-index: 9999;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            transition: transform 0.8s cubic-bezier(0.77, 0, 0.175, 1);
-        }
-        .welcome-text { font-size: clamp(1.2rem, 5vw, 1.8rem); font-weight: 800; color: var(--primary); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; padding: 0 20px; }
-        .welcome-text span { display: inline-block; transform: translateY(30px); opacity: 0; animation: jump 0.4s forwards; }
-        @keyframes jump { to { transform: translateY(0); opacity: 1; } }
-
-        /* --- TRANG --- */
-        .page { position: absolute; inset: 0; display: none; flex-direction: column; opacity: 0; transition: 0.4s ease; }
-        .page.active { display: flex; opacity: 1; z-index: 10; }
-
-        /* --- HEADER (Tối ưu tai thỏ) --- */
-        .header { 
-            padding: calc(var(--safe-top) + 20px) 20px 15px; 
-            background: rgba(0,0,0,0.5); 
-            border-bottom: 1px solid var(--border); 
-            display: flex; 
-            align-items: center; 
-            gap: 12px; 
-        }
-
-        /* --- CHAT AREA --- */
-        .chat-scroll { 
-            flex: 1; 
-            overflow-y: auto; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            gap: 15px; 
-            -webkit-overflow-scrolling: touch; /* Cuộn mượt trên iOS */
-        }
-
-        .bubble { 
-            padding: 12px 16px; 
-            border-radius: 18px; 
-            font-size: 15px; 
-            max-width: 85%;
-            word-wrap: break-word; /* Chống tràn chữ dài */
-        }
-        .b-me { background: var(--primary); color: #000; align-self: flex-end; border-bottom-right-radius: 4px; }
-        .b-other { background: var(--glass); align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--border); }
-
-        /* --- FOOTER (Tối ưu bàn phím di động) --- */
-        .chat-footer { 
-            padding: 15px 20px calc(var(--safe-bottom) + 15px); 
-            background: rgba(0,0,0,0.8); 
-            display: flex; 
-            gap: 10px; 
-            align-items: center; 
-        }
-
-        /* UI ELEMENTS */
-        .glass-card {
-            margin: auto; width: 90%; padding: clamp(20px, 5vw, 35px); 
-            background: var(--glass); border: 1px solid var(--border); 
-            border-radius: 25px; backdrop-filter: blur(25px); text-align: center;
-        }
-        .input-box {
-            width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border);
-            padding: 14px; border-radius: 12px; color: white; margin-bottom: 12px; outline: none; font-size: 16px; /* Font 16px tránh iOS tự động zoom khi focus */
-        }
-        .btn-glow {
-            width: 100%; padding: 14px; border-radius: 12px; border: none;
-            background: linear-gradient(45deg, var(--primary), #4facfe);
-            color: #000; font-weight: 700; cursor: pointer;
-        }
-
-        /* EMOJI PICKER RESPONSIVE */
-        #emojiPicker { 
-            position: absolute; bottom: 90px; left: 10px; right: 10px;
-            background: #1a1a20; border: 1px solid var(--border); 
-            padding: 15px; border-radius: 20px;
-            display: none; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 10px; z-index: 100;
-            box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-        }
-
-        #loader { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 10000; display: none; place-items: center; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>VibeChat | AnhBaTalk</title>
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#00f2fe;--accent:#ffcc00;--bg:#020205;--glass:rgba(255,255,255,.08);--border:rgba(255,255,255,.12);--safe-top:env(safe-area-inset-top);--safe-bottom:env(safe-area-inset-bottom)}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Plus Jakarta Sans',sans-serif;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;justify-content:center;align-items:center}
+.universe{position:fixed;inset:0;z-index:-1;background:radial-gradient(circle at 50% 50%,#0d1117,#020205)}
+.star{position:absolute;background:#fff;border-radius:50%;opacity:.5;animation:tw var(--d) infinite}
+@keyframes tw{50%{opacity:1}}
+.app-shell{width:100%;max-width:500px;height:100dvh;position:relative;background:rgba(10,10,15,.92);border:0 solid var(--border);border-width:0 1px;display:flex;flex-direction:column;box-shadow:0 0 100px #000c;overflow:hidden}
+@media(min-width:768px){.app-shell{height:90vh;border-radius:30px;border-width:1px}body{background:#000}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#splash{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .8s cubic-bezier(.77,0,.175,1)}
+.welcome-text{font-size:clamp(1.2rem,5vw,1.8rem);font-weight:800;color:var(--primary);display:flex;flex-wrap:wrap;justify-content:center;gap:4px;padding:0 20px}
+.welcome-text span{display:inline-block;transform:translateY(30px);opacity:0;animation:jump .4s forwards}
+@keyframes jump{to{transform:none;opacity:1}}
+.bob{animation:bob 2.2s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-8px) rotate(6deg)}}
+.page{position:absolute;inset:0;display:none;flex-direction:column}
+.page.active{display:flex;z-index:10;animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}}
+.header{padding:calc(var(--safe-top) + 18px) 18px 14px;background:rgba(0,0,0,.5);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.ic{cursor:pointer;display:inline-grid;place-items:center;transition:transform .2s}
+.ic:hover{transform:scale(1.2) rotate(-6deg)}.ic:active{transform:scale(.85)}
+.av{width:44px;height:44px;border-radius:50%;background:var(--glass);display:grid;place-items:center;font-size:22px;border:1px solid var(--primary);box-shadow:0 0 12px #0004}
+.net{font-size:10px;color:#4ade80;display:block}
+.net::before{content:"●";margin-right:4px;animation:pulse 1.6s infinite}
+.net.off{color:#ff4b4b}.net.off::before{animation:none}
+@keyframes pulse{50%{opacity:.25}}
+.chat-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.row{display:flex;flex-direction:column;align-items:flex-start}
+.row.me{align-items:flex-end}
+.row.new{animation:pop .3s cubic-bezier(.2,1.4,.4,1)}
+.row.new.me{transform-origin:bottom right}.row.new:not(.me){transform-origin:bottom left}
+@keyframes pop{from{opacity:0;transform:scale(.6) translateY(14px)}}
+.bubble{padding:11px 15px;border-radius:18px;font-size:15px;max-width:85%;word-wrap:break-word;white-space:pre-wrap}
+.b-me{background:linear-gradient(135deg,var(--primary),#4facfe);color:#000;border-bottom-right-radius:4px}
+.b-other{background:var(--glass);border-bottom-left-radius:4px;border:1px solid var(--border)}
+.bubble.pending{opacity:.55}
+.bubble.big{background:none;border:0;font-size:44px;padding:0;animation:boing .6s}
+@keyframes boing{30%{transform:scale(1.4) rotate(-8deg)}60%{transform:scale(.9) rotate(5deg)}}
+.meta{font-size:10px;color:#999;margin-top:3px}
+.tr-btn{font-size:10px;color:var(--primary);cursor:pointer;margin-top:5px}
+.tr-out{display:none;font-size:13px;color:#ccc;margin-top:5px;padding:8px;border-left:2px solid var(--accent);background:#ffffff0d;border-radius:8px}
+.chat-footer{padding:12px 16px calc(var(--safe-bottom) + 12px);background:rgba(0,0,0,.8);display:flex;gap:10px;align-items:center}
+.glass-card{margin:auto;width:90%;padding:clamp(20px,5vw,35px);background:var(--glass);border:1px solid var(--border);border-radius:25px;text-align:center}
+.input-box{width:100%;background:rgba(0,0,0,.4);border:1px solid var(--border);padding:13px;border-radius:12px;color:#fff;margin-bottom:12px;outline:none;font-size:16px;transition:border-color .2s,box-shadow .2s}
+.input-box:focus{border-color:var(--primary);box-shadow:0 0 12px #0003}
+.btn-glow{width:100%;padding:14px;border-radius:12px;border:0;background:linear-gradient(45deg,var(--primary),#4facfe);color:#000;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .2s}
+.btn-glow:hover{box-shadow:0 0 18px var(--primary)}.btn-glow:active{transform:scale(.93)}
+.btn-glow.fly span{display:inline-block;animation:fly .5s}
+@keyframes fly{40%{transform:translate(16px,-16px) scale(1.3);opacity:0}41%{transform:translate(-16px,16px);opacity:0}}
+#emojiPicker{position:absolute;bottom:84px;left:10px;right:10px;background:#1a1a20;border:1px solid var(--border);padding:14px;border-radius:20px;display:none;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:8px;z-index:100;animation:pop .25s}
+#emojiPicker span{cursor:pointer;font-size:26px;text-align:center;transition:transform .15s}
+#emojiPicker span:hover{transform:scale(1.4) rotate(8deg)}
+#fab{position:absolute;right:16px;bottom:84px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:#1a1a20;color:#fff;font-size:18px;cursor:pointer;display:none;z-index:50;animation:pop .25s}
+#fab b{position:absolute;top:-6px;right:-6px;background:#ff4b4b;border-radius:10px;font-size:11px;padding:1px 6px}
+#fxLayer{position:fixed;inset:0;pointer-events:none;z-index:200;overflow:hidden}
+.fx{position:absolute;bottom:90px;animation:rise 1.7s ease-out forwards}
+@keyframes rise{to{transform:translate(var(--dx),-65vh) rotate(30deg);opacity:0}}
+.ib{display:flex;padding:16px 18px;border-bottom:1px solid var(--border);gap:12px;cursor:pointer;align-items:center;transition:background .2s}
+.ib:hover{background:#ffffff0d}.ib:active{background:#ffffff1a}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--primary);animation:pulse 1.2s infinite;box-shadow:0 0 8px var(--primary)}
+.sk{height:64px;margin:12px 18px;border-radius:14px;background:linear-gradient(90deg,#fff1 25%,#fff2 50%,#fff1 75%);background-size:200% 100%;animation:sh 1.2s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.empty{text-align:center;color:#888;padding:40px 20px;font-size:14px;line-height:1.8}
+.theme-dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .2s}
+.theme-dot:hover{transform:scale(1.25)}.theme-dot.sel{border-color:#fff}
+#loader{position:fixed;inset:0;background:#000e;z-index:10000;display:none;place-items:center;font-weight:800;color:var(--primary)}
+</style>
 </head>
 <body>
-
 <div class="universe" id="universe"></div>
-
-<!-- SPLASH SCREEN -->
-<div id="splash">
-    <div class="welcome-text" id="welcomeTxt"></div>
-    <div id="eye" style="font-size: 60px; margin-top: 15px;">😎</div>
-</div>
+<div id="fxLayer"></div>
+<div id="splash"><div class="welcome-text" id="welcomeTxt"></div><div id="eye" class="bob" style="font-size:60px;margin-top:15px">😎</div></div>
 
 <div class="app-shell">
-    <!-- TRANG LOGIN -->
-    <div class="page" id="pageAuth">
-        <div class="glass-card">
-            <h1 style="font-size: clamp(24px, 8vw, 32px); margin-bottom: 20px; color: var(--primary);">VibeChat</h1>
-            <input type="text" id="user" class="input-box" placeholder="Tên đăng nhập">
-            <input type="password" id="pass" class="input-box" placeholder="Mật khẩu">
-            <div id="regExtra" style="display:none; margin-bottom: 15px;">
-                <p style="font-size:11px; color:var(--primary); margin-bottom:8px;">CHỌN ICON ĐẠI DIỆN:</p>
-                <div style="display:flex; justify-content:center; gap:10px;">
-                    <div class="av-item" style="cursor:pointer; font-size:24px;" onclick="pickAv(this)">🤵</div>
-                    <div class="av-item" style="cursor:pointer; font-size:24px;" onclick="pickAv(this)">😎</div>
-                    <div class="av-item" style="cursor:pointer; font-size:24px;" onclick="pickAv(this)">🦁</div>
-                    <div class="av-item" style="cursor:pointer; font-size:24px;" onclick="pickAv(this)">🐉</div>
-                </div>
-            </div>
-            <button class="btn-glow" id="btnAuth" onclick="handleAuth()">XÁC NHẬN</button>
+  <div class="page" id="pageAuth">
+    <div class="glass-card">
+      <div class="bob" style="font-size:42px">🚀</div>
+      <h1 style="font-size:clamp(24px,8vw,32px);margin-bottom:20px;color:var(--primary)">VibeChat</h1>
+      <input type="text" id="user" class="input-box" placeholder="Tên đăng nhập" autocomplete="username">
+      <input type="password" id="pass" class="input-box" placeholder="Mật khẩu" autocomplete="current-password">
+      <div id="regExtra" style="display:none;margin-bottom:15px">
+        <p style="font-size:11px;color:var(--primary);margin-bottom:8px">CHỌN ICON ĐẠI DIỆN:</p>
+        <div style="display:flex;justify-content:center;gap:10px">
+          <span class="ic" style="font-size:26px" onclick="pickAv(this)">🤵</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">😎</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">🦁</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">🐉</span>
         </div>
+      </div>
+      <button class="btn-glow" id="btnAuth" onclick="handleAuth()">XÁC NHẬN</button>
     </div>
+  </div>
 
-    <!-- TRANG SETTINGS -->
-    <div class="page" id="pageSettings">
-        <div class="header">
-            <div onclick="changePage('inbox')" style="cursor:pointer; font-size:20px;">←</div>
-            <b>Cài đặt</b>
-        </div>
-        <div class="glass-card" style="margin-top:20px;">
-            <input type="text" id="newName" class="input-box" placeholder="Đổi tên hiển thị">
-            <div style="display:flex; justify-content:center; gap:15px; margin: 20px 0;">
-                <div onclick="pickAv(this)" style="cursor:pointer; font-size:30px;">🐱</div>
-                <div onclick="pickAv(this)" style="cursor:pointer; font-size:30px;">👽</div>
-                <div onclick="pickAv(this)" style="cursor:pointer; font-size:30px;">🤖</div>
-                <div onclick="pickAv(this)" style="cursor:pointer; font-size:30px;">💎</div>
-            </div>
-            <button class="btn-glow" onclick="updateProfile()">LƯU THAY ĐỔI</button>
-        </div>
+  <div class="page" id="pageSettings">
+    <div class="header"><span class="ic" onclick="changePage('inbox')" style="font-size:22px">←</span><b>Cài đặt</b></div>
+    <div class="glass-card" style="margin-top:20px">
+      <input type="text" id="newName" class="input-box" placeholder="Đổi tên hiển thị">
+      <div style="display:flex;justify-content:center;gap:15px;margin:16px 0">
+        <span class="ic" onclick="pickAv(this)" style="font-size:30px">🐱</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">👽</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">🤖</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">💎</span>
+      </div>
+      <p style="font-size:11px;color:var(--primary);margin-bottom:8px">MÀU GIAO DIỆN</p>
+      <div id="themeDots" style="display:flex;justify-content:center;gap:12px;margin-bottom:20px"></div>
+      <button class="btn-glow" onclick="updateProfile()">LƯU THAY ĐỔI</button>
     </div>
+  </div>
 
-    <!-- TRANG INBOX -->
-    <div class="page" id="pageInbox">
-        <div class="header">
-            <div id="myAv" onclick="changePage('settings')" style="width:45px; height:45px; border-radius:50%; background:var(--glass); display:grid; place-items:center; font-size:22px; cursor:pointer; border:1px solid var(--border);">👤</div>
-            <div style="flex:1"><b id="myName">...</b><div style="font-size:10px; color:var(--primary)">VŨ TRỤ TRỰC TUYẾN</div></div>
-            <div onclick="logout()" style="font-size:12px; color:#ff4b4b; font-weight:bold; cursor:pointer">THOÁT</div>
-        </div>
-        <div id="inboxList" style="flex:1; overflow-y:auto;"></div>
+  <div class="page" id="pageInbox">
+    <div class="header">
+      <div id="myAv" class="av ic" onclick="changePage('settings')">👤</div>
+      <div style="flex:1"><b id="myName">...</b><div style="font-size:10px;color:var(--primary)">VŨ TRỤ TRỰC TUYẾN</div></div>
+      <span class="ic" id="snd" onclick="toggleSound()" style="font-size:20px">🔔</span>
+      <span class="ic" onclick="newChat()" style="font-size:20px">➕</span>
+      <span class="ic" onclick="logout()" style="font-size:12px;color:#ff4b4b;font-weight:bold">THOÁT</span>
     </div>
+    <div style="padding:12px 18px 0"><input id="q" class="input-box" style="margin:0" placeholder="🔍 Tìm cuộc trò chuyện..." oninput="renderInbox(inboxData)"></div>
+    <div id="inboxList" style="flex:1;overflow-y:auto"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+  </div>
 
-    <!-- TRANG CHAT -->
-    <div class="page" id="pageChat">
-        <div class="header">
-            <div onclick="changePage('inbox')" style="cursor:pointer; font-size:24px;">←</div>
-            <div id="peerAv" style="width:40px; height:40px; border-radius:50%; background:var(--glass); display:grid; place-items:center; border:1px solid var(--border);">👤</div>
-            <b id="peerName">...</b>
-        </div>
-        <div id="chatBox" class="chat-scroll"></div>
-        <div id="emojiPicker"></div>
-        <div class="chat-footer">
-            <div style="font-size:24px; cursor:pointer;" onclick="toggleEmoji()">😊</div>
-            <input type="text" id="msgInput" class="input-box" style="margin:0; flex:1;" placeholder="Gửi tin nhắn...">
-            <button class="btn-glow" onclick="sendMsg()" style="width:55px; padding:12px;">🚀</button>
-        </div>
+  <div class="page" id="pageChat">
+    <div class="header">
+      <span class="ic" onclick="changePage('inbox')" style="font-size:24px">←</span>
+      <div id="peerAv" class="av">👤</div>
+      <div><b id="peerName">...</b><span class="net" id="net">Trực tuyến</span></div>
     </div>
+    <div id="chatBox" class="chat-scroll"></div>
+    <button id="fab" onclick="toBottom()">⬇️</button>
+    <div id="emojiPicker"></div>
+    <div class="chat-footer">
+      <span class="ic" style="font-size:26px" onclick="toggleEmoji()">😊</span>
+      <input type="text" id="msgInput" class="input-box" style="margin:0;flex:1" placeholder="Gửi tin nhắn..." autocomplete="off">
+      <button class="btn-glow" id="btnSend" style="width:55px;padding:12px"><span>🚀</span></button>
+    </div>
+  </div>
 </div>
-
 <div id="loader">🚀 ĐANG KẾT NỐI...</div>
 
 <script>
-    const API = "https://script.google.com/macros/s/AKfycbxHHt1ijMwnNbQAh5AB-QPP3Pg6b08-EpSW1DvbDAzM3egAASwU1gV-F1QeTZpn0bII/exec";
-    let me = JSON.parse(localStorage.getItem('vibe_cosmic_user'));
-    let timer = null, selectedAv = "🤵";
+const API="https://script.google.com/macros/s/AKfycbxHHt1ijMwnNbQAh5AB-QPP3Pg6b08-EpSW1DvbDAzM3egAASwU1gV-F1QeTZpn0bII/exec";
+const $=id=>document.getElementById(id), TITLE="VibeChat | AnhBaTalk";
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const jget=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const jset=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const VI=/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i;
+const EMO=/^(?:\p{Extended_Pictographic}[\ufe0f]*){1,3}$/u, EM1=/\p{Extended_Pictographic}/u;
+let me=jget('vibe_cosmic_user',null), selectedAv="🤵", wake=()=>{}, loopId=0, boostUntil=0, soundOn=jget('vibe_snd',true), AC;
 
-    // Khởi tạo sao băng
-    function initUniverse() {
-        const uv = document.getElementById('universe');
-        for(let i=0; i<80; i++) {
-            const s = document.createElement('div');
-            s.className = 'star';
-            const size = Math.random() * 2 + 1 + 'px';
-            s.style.width = size; s.style.height = size;
-            s.style.top = Math.random() * 100 + '%';
-            s.style.left = Math.random() * 100 + '%';
-            s.style.setProperty('--d', Math.random() * 3 + 2 + 's');
-            uv.appendChild(s);
-        }
+/* ---- Mạng: no-store + timeout + trạng thái kết nối ---- */
+function setNet(ok){const n=$('net');n.classList.toggle('off',!ok);n.textContent=ok?'Trực tuyến':'Mất kết nối...'}
+async function api(params,ms=8000){
+  const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);
+  try{const r=await fetch(API+'?'+new URLSearchParams(params),{signal:c.signal,cache:'no-store'});const d=await r.json();setNet(true);return d}
+  catch(e){setNet(false);throw e}finally{clearTimeout(t)}
+}
+const sleep=ms=>new Promise(r=>{const t=setTimeout(r,ms);wake=()=>{clearTimeout(t);r()}});
+function startLoop(fn,fast,slow){
+  const id=++loopId;
+  (async()=>{while(id===loopId){
+    try{await fn()}catch(e){}
+    if(id!==loopId)break;
+    await sleep(document.hidden?6000:Date.now()<boostUntil?fast:slow);
+  }})();
+}
+const stopLoop=()=>{loopId++;wake()};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){wake();if(nearBottom()){unread=0;updUnread()}}});
+addEventListener('online',()=>wake());
+document.addEventListener('pointerdown',()=>{try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();AC.resume()}catch{}},{once:true});
+
+/* ---- Hiệu ứng ---- */
+function ping(){
+  if(soundOn)try{const o=AC.createOscillator(),g=AC.createGain(),t=AC.currentTime;o.frequency.setValueAtTime(660,t);o.frequency.exponentialRampToValueAtTime(990,t+.12);g.gain.setValueAtTime(.15,t);g.gain.exponentialRampToValueAtTime(.001,t+.3);o.connect(g);g.connect(AC.destination);o.start();o.stop(t+.3)}catch{}
+  navigator.vibrate&&navigator.vibrate(30);
+}
+function burst(e){
+  const f=document.createDocumentFragment();
+  for(let i=0;i<14;i++){const s=document.createElement('span');s.className='fx';s.textContent=e;
+    s.style.cssText=`left:${8+Math.random()*84}%;--dx:${(Math.random()-.5)*140}px;font-size:${18+Math.random()*24}px;animation-delay:${Math.random()*.3}s`;
+    s.onanimationend=()=>s.remove();f.appendChild(s)}
+  $('fxLayer').appendChild(f);
+}
+function toggleSound(){soundOn=!soundOn;jset('vibe_snd',soundOn);$('snd').textContent=soundOn?'🔔':'🔕'}
+const THEMES=['#00f2fe','#ff6bcb','#7cff6b','#ffcc00','#b388ff'];
+function setTheme(c){document.documentElement.style.setProperty('--primary',c);jset('vibe_theme',c);document.querySelectorAll('.theme-dot').forEach(d=>d.classList.toggle('sel',d.dataset.c===c))}
+
+/* ---- Khởi tạo ---- */
+window.onload=()=>{
+  const uv=$('universe'),f=document.createDocumentFragment();
+  for(let i=0;i<40;i++){const s=document.createElement('div'),z=Math.random()*2+1+'px';s.className='star';s.style.cssText=`width:${z};height:${z};top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${Math.random()*3+2}s`;f.appendChild(s)}
+  uv.appendChild(f);
+  const box=$('welcomeTxt');
+  "Welcome to VibeChat | AnhBaTalk".split('').forEach((c,i)=>{const s=document.createElement('span');s.textContent=c===' '?'\u00A0':c;s.style.animationDelay=`${i*.03}s`;box.appendChild(s)});
+  THEMES.forEach(c=>{const d=document.createElement('div');d.className='theme-dot';d.dataset.c=c;d.style.background=c;d.onclick=()=>setTheme(c);$('themeDots').appendChild(d)});
+  setTheme(jget('vibe_theme',THEMES[0]));$('snd').textContent=soundOn?'🔔':'🔕';
+  if(me){syncMe();const c=jget('vibe_inbox',null);if(c)renderInbox(c);loadInbox().catch(()=>{})}
+  setTimeout(()=>{$('eye').textContent="😉"},1200);
+  setTimeout(()=>{$('splash').style.transform='translateY(-100%)';changePage(me?'inbox':'auth')},2000);
+  const em=$('emojiPicker');
+  ['😊','😂','❤️','😍','👍','🔥','✨','😎','😭','🚀','🦁','🐲','🎉','🥳','😘','🙏','💯','😱','🤣','💎'].forEach(e=>{const s=document.createElement('span');s.textContent=e;s.onclick=()=>{$('msgInput').value+=e};em.appendChild(s)});
+  $('msgInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();sendMsg()}});
+  $('btnSend').addEventListener('pointerdown',e=>e.preventDefault());
+  $('btnSend').addEventListener('click',sendMsg);
+  $('chatBox').addEventListener('click',e=>{if(e.target.classList.contains('tr-btn'))doTrans(e.target)});
+  $('chatBox').addEventListener('scroll',()=>{const n=nearBottom();$('fab').style.display=n?'none':'block';if(n&&unread){unread=0;updUnread()}},{passive:true});
+  $('inboxList').addEventListener('click',e=>{const el=e.target.closest('.ib');if(el)openChat(el.dataset.name,el.dataset.av)});
+};
+function changePage(id){
+  stopLoop();
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  $('page'+id[0].toUpperCase()+id.slice(1)).classList.add('active');
+  if(id==='inbox'){inboxSig='';renderInbox(jget('vibe_inbox',inboxData));startLoop(loadInbox,3000,3000)}
+}
+
+/* ---- Đăng nhập / hồ sơ ---- */
+async function handleAuth(){
+  const u=$('user').value.trim(),p=$('pass').value;if(!u||!p)return;
+  $('loader').style.display='grid';
+  try{
+    const d=await api({action:'login',user:u,pass:p},12000);
+    if(d.ok){me={name:u,avatar:d.avatar||"🤵"};return saveUser()}
+    $('loader').style.display='none';$('regExtra').style.display='block';
+    const b=$('btnAuth');
+    if(b.hasAttribute('data-reg')){
+      await fetch(API,{method:'POST',mode:'no-cors',body:JSON.stringify({action:'send',from:u,to:'SYS',message:'JOIN',avatar:selectedAv})});
+      me={name:u,avatar:selectedAv};return saveUser();
     }
+    b.setAttribute('data-reg','true');
+  }catch{$('loader').style.display='none';alert('Không kết nối được, thử lại nhé!')}
+}
+function saveUser(){jset('vibe_cosmic_user',me);syncMe();$('loader').style.display='none';changePage('inbox')}
+function syncMe(){$('myAv').textContent=me.avatar;$('myName').textContent=me.name}
+function updateProfile(){const n=$('newName').value.trim();if(n)me.name=n;me.avatar=selectedAv;jset('vibe_cosmic_user',me);syncMe();changePage('inbox')}
+function logout(){localStorage.removeItem('vibe_cosmic_user');location.reload()}
+function pickAv(el){selectedAv=el.textContent;el.parentElement.querySelectorAll('.ic').forEach(d=>d.style.opacity='.5');el.style.opacity='1'}
+function newChat(){const n=(prompt('Nhập tên người muốn nhắn tin:')||'').trim();if(n&&n!==me.name)openChat(n,'')}
+function toggleEmoji(){const p=$('emojiPicker');p.style.display=p.style.display==='grid'?'none':'grid'}
 
-    window.onload = () => {
-        initUniverse();
-        const txt = "Welcome to VibeChat | AnhBaTalk";
-        const box = document.getElementById('welcomeTxt');
-        txt.split('').forEach((c, i) => {
-            const s = document.createElement('span');
-            s.innerText = c === ' ' ? '\u00A0' : c;
-            s.style.animationDelay = `${i * 0.03}s`;
-            box.appendChild(s);
-        });
+/* ---- Inbox (chấm chưa đọc, tìm kiếm, skeleton) ---- */
+let inboxData=[],inboxSig='';
+const markSeen=(n,m)=>{const s=jget('vibe_seen',{});if(s[n]!==m){s[n]=m;jset('vibe_seen',s)}};
+async function loadInbox(){
+  const data=await api({action:'contacts',user:me.name});if(!Array.isArray(data))return;
+  const first=localStorage.getItem('vibe_seen')===null,seen=jget('vibe_seen',{}),prev=inboxData;
+  if(first){data.forEach(c=>{if(c.lastMsg)seen[c.name]=c.lastMsg});jset('vibe_seen',seen)}
+  else if(prev.length&&data.some(c=>{const o=prev.find(x=>x.name===c.name);return o&&o.lastMsg!==c.lastMsg&&c.lastMsg!==seen[c.name]}))ping();
+  jset('vibe_inbox',data);renderInbox(data);
+}
+function renderInbox(data){
+  inboxData=data;const q=$('q').value.trim().toLowerCase(),seen=jget('vibe_seen',{});
+  const list=data.filter(c=>c.name!==me.name&&c.lastMsg&&String(c.name).toLowerCase().includes(q));
+  const sig=JSON.stringify([list,seen,q]);if(sig===inboxSig)return;inboxSig=sig;
+  $('inboxList').innerHTML=list.length?list.map(c=>`<div class="ib" data-name="${esc(c.name)}" data-av="${esc(c.avatar||'')}"><div class="av">${esc(c.avatar||'👤')}</div><div style="flex:1;min-width:0"><b>${esc(c.name)}</b><p style="font-size:12px;color:${c.lastMsg!==seen[c.name]?'#fff':'#888'};margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.lastMsg)}</p></div>${c.lastMsg!==seen[c.name]?'<span class="dot"></span>':''}</div>`).join(''):'<div class="empty"><div class="bob" style="font-size:40px">🪐</div>Chưa có cuộc trò chuyện nào.<br>Bấm ➕ để nhắn tin mới</div>';
+}
 
-        setTimeout(() => { document.getElementById('eye').innerText = "😉"; }, 1500);
-        setTimeout(() => {
-            document.getElementById('splash').style.transform = 'translateY(-100%)';
-            if(me) { syncMe(); changePage('inbox'); } else { changePage('auth'); }
-        }, 2500);
+/* ---- Chat ---- */
+let peer=null,msgs=[],pending=[],shown=[],unread=0;
+const ck=()=>'vibe_m_'+me.name+'_'+peer.name;
+const countMine=t=>msgs.reduce((n,m)=>n+(m.from===me.name&&m.message===t?1:0),0);
+const nearBottom=()=>{const b=$('chatBox');return b.scrollHeight-b.scrollTop-b.clientHeight<120};
+function updUnread(){$('fab').innerHTML='⬇️'+(unread?`<b>${unread}</b>`:'');document.title=unread&&document.hidden?`(${unread}) ${TITLE}`:TITLE}
+function toBottom(){const b=$('chatBox');b.scrollTo({top:b.scrollHeight,behavior:'smooth'});unread=0;updUnread()}
 
-        initEmojis();
-        document.getElementById('msgInput').addEventListener('keypress', e => e.key === 'Enter' && sendMsg());
-    };
-
-    function changePage(id) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        const p = document.getElementById('page' + id.charAt(0).toUpperCase() + id.slice(1));
-        p.style.display = 'flex';
-        setTimeout(() => p.classList.add('active'), 50);
-        if(id === 'inbox') loadInbox();
-        if(id !== 'chat') clearInterval(timer);
-    }
-
-    async function handleAuth() {
-        const u = document.getElementById('user').value, p = document.getElementById('pass').value;
-        if(!u || !p) return;
-        document.getElementById('loader').style.display = 'grid';
-        const res = await fetch(`${API}?action=login&user=${u}&pass=${p}`);
-        const data = await res.json();
-        if(data.ok) {
-            me = { name: u, avatar: data.avatar || "🤵" };
-            saveUser();
-        } else {
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('regExtra').style.display = 'block';
-            if(document.getElementById('btnAuth').hasAttribute('data-reg')) {
-                await fetch(API, { method:"POST", mode:"no-cors", body:JSON.stringify({action:"send", from:u, to:"SYS", message:"JOIN", avatar:selectedAv}) });
-                me = { name: u, avatar: selectedAv }; saveUser();
-            }
-            document.getElementById('btnAuth').setAttribute('data-reg', 'true');
-        }
-    }
-
-    function saveUser() {
-        localStorage.setItem('vibe_cosmic_user', JSON.stringify(me));
-        syncMe(); document.getElementById('loader').style.display='none'; changePage('inbox');
-    }
-
-    function syncMe() {
-        document.getElementById('myAv').innerText = me.avatar;
-        document.getElementById('myName').innerText = me.name;
-    }
-
-    function updateProfile() {
-        const n = document.getElementById('newName').value;
-        if(n) me.name = n;
-        me.avatar = selectedAv;
-        localStorage.setItem('vibe_cosmic_user', JSON.stringify(me));
-        syncMe(); changePage('inbox');
-    }
-
-    function logout() { localStorage.removeItem('vibe_cosmic_user'); location.reload(); }
-
-    async function loadInbox() {
-        const res = await fetch(`${API}?action=contacts&user=${me.name}`);
-        const data = await res.json();
-        document.getElementById('inboxList').innerHTML = data.filter(c => c.name !== me.name && c.lastMsg).map(c => `
-            <div style="display:flex; padding:18px; border-bottom:1px solid var(--border); gap:12px; cursor:pointer" onclick="openChat('${c.name}','${c.avatar}')">
-                <div style="width:48px; height:48px; border-radius:50%; background:var(--glass); display:grid; place-items:center; font-size:20px; border:1px solid var(--border);">${c.avatar || '👤'}</div>
-                <div style="flex:1"><b>${c.name}</b><p style="font-size:12px; color:#888; margin-top:4px;">${c.lastMsg}</p></div>
-            </div>
-        `).join('');
-    }
-
-    let activePeer = null;
-    function openChat(name, av) {
-        activePeer = { name, av };
-        document.getElementById('peerName').innerText = name;
-        document.getElementById('peerAv').innerText = av || '👤';
-        changePage('chat');
-        syncMsgs();
-        timer = setInterval(syncMsgs, 3000);
-    }
-
-    async function syncMsgs() {
-        const res = await fetch(`${API}?action=messages&user=${me.name}&peer=${activePeer.name}`);
-        const data = await res.json();
-        document.getElementById('chatBox').innerHTML = data.map(m => {
-            const isMe = m.from === me.name;
-            const isForeign = !/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(m.message);
-            return `
-                <div style="display:flex; flex-direction:column; ${isMe ? 'align-items:flex-end' : 'align-items:flex-start'}">
-                    <div class="bubble ${isMe ? 'b-me' : 'b-other'}">${m.message}</div>
-                    ${!isMe && isForeign ? `<div style="font-size:10px; color:var(--primary); cursor:pointer; margin-top:5px;" onclick="doTrans(this, '${encodeURIComponent(m.message)}')">✨ Dịch nhanh</div>` : ''}
-                    <div style="font-size:13px; color:#ccc; margin-top:5px; padding:8px; border-left:2px solid var(--accent); background:rgba(255,255,255,0.05); border-radius:8px; display:none;"></div>
-                </div>
-            `;
-        }).join('');
-        const b = document.getElementById('chatBox'); b.scrollTop = b.scrollHeight;
-    }
-
-    async function doTrans(btn, txt) {
-        const box = btn.nextElementSibling; box.style.display = 'block'; box.innerText = "Đang giải mã...";
-        const res = await fetch(`https://api.mymemory.translated.net/get?q=${txt}&langpair=auto|vi`);
-        const data = await res.json();
-        box.innerText = data.responseData.translatedText; btn.style.display = 'none';
-    }
-
-    async function sendMsg() {
-        const i = document.getElementById('msgInput'), v = i.value.trim();
-        if(!v) return; i.value = "";
-        document.getElementById('emojiPicker').style.display = 'none';
-        await fetch(API, { method:"POST", mode:"no-cors", body:JSON.stringify({action:"send", from:me.name, to:activePeer.name, message:v, avatar:me.avatar}) });
-        syncMsgs();
-    }
-
-    function initEmojis() {
-        const ems = ['😊','😂','❤️','😍','👍','🔥','✨','😎','😭','🚀','🦁','🐲'];
-        const p = document.getElementById('emojiPicker');
-        ems.forEach(e => {
-            const s = document.createElement('span');
-            s.innerText = e; s.style.cssText = "cursor:pointer; font-size:24px; text-align:center;";
-            s.onclick = () => document.getElementById('msgInput').value += e;
-            p.appendChild(s);
-        });
-    }
-
-    function toggleEmoji() {
-        const p = document.getElementById('emojiPicker');
-        p.style.display = p.style.display === 'grid' ? 'none' : 'grid';
-    }
-
-    function pickAv(el) { selectedAv = el.innerText; el.parentElement.querySelectorAll('div').forEach(d => d.style.opacity = '0.5'); el.style.opacity = '1'; }
+function openChat(name,av){
+  peer={name,av,synced:false};msgs=jget(ck(),[]);pending=[];shown=[];unread=0;updUnread();
+  $('chatBox').innerHTML='';$('peerName').textContent=name;$('peerAv').textContent=av||'👤';
+  changePage('chat');renderChat();
+  boostUntil=Date.now()+10000;
+  startLoop(syncMsgs,400,1200);           // 0.4s khi đang sôi nổi, 1.2s khi yên
+}
+async function syncMsgs(){
+  const p=peer,data=await api({action:'messages',user:me.name,peer:p.name,since:msgs.length});
+  if(p!==peer||!Array.isArray(data))return;
+  const last=a=>a.length?a[a.length-1].message:null;
+  if(data.length===msgs.length&&last(data)===last(msgs)){p.synced=true;return}
+  const fresh=p.synced?data.slice(msgs.length).filter(m=>m.from!==me.name):[];
+  p.synced=true;if(data.length>msgs.length)boostUntil=Date.now()+15000;
+  msgs=data;jset(ck(),data.slice(-100));renderChat();
+  if(fresh.length){
+    ping();const l=String(fresh[fresh.length-1].message);
+    if(EMO.test(l.trim()))burst(l.match(EM1)[0]);
+    if(document.hidden||!nearBottom()){unread+=fresh.length;updUnread()}
+  }
+}
+function rowEl(r,anim){
+  const d=document.createElement('div'),m=String(r.m.message);
+  d.className='row '+(r.me?'me':'other')+(anim?' new':'');
+  const big=EMO.test(m.trim());
+  d.innerHTML=`<div class="bubble ${r.me?'b-me':'b-other'}${r.p?' pending':''}${big?' big':''}">${esc(m)}</div>`+(r.p?'<div class="meta">🕓 đang gửi...</div>':'');
+  if(r.p)d.dataset.p=1;
+  if(!r.me&&!r.p&&!big&&!VI.test(m)){d.insertAdjacentHTML('beforeend','<div class="tr-btn">✨ Dịch nhanh</div><div class="tr-out"></div>');d.dataset.t=m}
+  return d;
+}
+function renderChat(){
+  pending=pending.filter(x=>countMine(x.t)<=x.base);
+  const n=msgs.length,rows=msgs.map((m,i)=>({k:i+'|'+m.from+'|'+m.message,m,me:m.from===me.name}))
+    .concat(pending.map((x,j)=>({k:(n+j)+'|'+me.name+'|'+x.t,m:{message:x.t},me:true,p:1})));
+  const keys=rows.map(r=>r.k),box=$('chatBox'),near=nearBottom(),st=box.scrollTop;
+  const append=shown.length<=keys.length&&shown.every((k,i)=>k===keys[i]),start=append?shown.length:0;
+  // tin "đang gửi" đã lên server: bỏ mờ, không vẽ lại
+  [...box.children].slice(-8).forEach(el=>{const i=[...box.children].indexOf(el);if(el.dataset.p&&rows[i]&&!rows[i].p){delete el.dataset.p;el.querySelector('.bubble').classList.remove('pending');el.querySelector('.meta')?.remove()}});
+  if(append&&start===keys.length)return;
+  if(!append)box.innerHTML='';
+  const f=document.createDocumentFragment(),anim=append&&start>0;
+  rows.slice(start).forEach(r=>f.appendChild(rowEl(r,anim)));
+  box.appendChild(f);shown=keys;
+  if(near||rows.slice(start).some(r=>r.me))box.scrollTop=box.scrollHeight;else if(!append)box.scrollTop=st;
+  if(n)markSeen(peer.name,String(msgs[n-1].message));
+}
+async function sendMsg(){
+  const i=$('msgInput'),v=i.value.trim();if(!v||!peer)return;
+  i.value='';$('emojiPicker').style.display='none';
+  const b=$('btnSend');b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
+  const id='p'+Date.now()+Math.random();
+  pending.push({id,t:v,base:countMine(v)});renderChat();
+  if(EMO.test(v))burst(v.match(EM1)[0]);
+  markSeen(peer.name,v);boostUntil=Date.now()+15000;
+  try{
+    await fetch(API,{method:'POST',mode:'no-cors',keepalive:true,body:JSON.stringify({action:'send',from:me.name,to:peer.name,message:v,avatar:me.avatar})});
+    setNet(true);wake();
+  }catch{setNet(false);pending=pending.filter(x=>x.id!==id);shown=[];renderChat();i.value=v}
+}
+async function doTrans(btn){
+  const out=btn.nextElementSibling,t=btn.parentElement.dataset.t;
+  out.style.display='block';out.textContent='Đang giải mã...';
+  try{const r=await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(t)+'&langpair=auto|vi');out.textContent=(await r.json()).responseData.translatedText;btn.style.display='none'}
+  catch{out.textContent='Dịch lỗi, thử lại nhé'}
+}
 </script>
 </body>
 </html>

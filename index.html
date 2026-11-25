@@ -210,6 +210,10 @@ function burst(e){
     s.onanimationend=()=>s.remove();f.appendChild(s)}
   $('fxLayer').appendChild(f);
 }
+/* ---- Kiểm tra script Google đã là bản mới (v3) chưa ---- */
+let scriptV=null;
+function checkScript(){return fetch(API+'?action=version&_='+Date.now(),{cache:'no-store'}).then(r=>r.json()).then(d=>{scriptV=(d&&d.v)||0}).catch(()=>{scriptV=navigator.onLine?0:null})}
+function warnScript(){if(scriptV===0)showErr('Script Google đang là bản CŨ nên gửi ảnh/online không hoạt động. Dán Code.gs mới → chạy setup → Triển khai Phiên bản mới.',14000)}
 /* ---- Hình ảnh: nén bằng canvas, server lưu vào Drive, tin nhắn chỉ chứa [img]ID ---- */
 const IMG=/^\[img\]/,pretty=m=>IMG.test(String(m))?'📷 Hình ảnh':m;
 let staged=null;
@@ -227,7 +231,7 @@ function loadImg(im,id){
   };
   im.src=u[0];
 }
-function showErr(t){showToast('⚠️ Lỗi','⚠️',t);$('toast').onclick=()=>$('toast').style.display='none'}
+function showErr(t,ms){showToast('⚠️ Lỗi','⚠️',t);$('toast').onclick=()=>$('toast').style.display='none';if(ms){clearTimeout(toastT);toastT=setTimeout(()=>$('toast').style.display='none',ms)}}
 function openLb(src){$('lbImg').src=src;$('lb').style.display='grid'}
 /* ---- Thông báo: toast trong app + thông báo hệ thống khi tab bị ẩn ---- */
 let toastT;
@@ -264,7 +268,7 @@ window.onload=()=>{
   "Welcome to VibeChat | AnhBaTalk".split('').forEach((c,i)=>{const s=document.createElement('span');s.textContent=c===' '?'\u00A0':c;s.style.animationDelay=`${i*.03}s`;box.appendChild(s)});
   THEMES.forEach(c=>{const d=document.createElement('div');d.className='theme-dot';d.dataset.c=c;d.style.background=c;d.onclick=()=>setTheme(c);$('themeDots').appendChild(d)});
   setTheme(jget('vibe_theme',THEMES[0]));updNotifBtn();buildAv('avGridS');buildAv('avGridR');setAv(selectedAv);$('snd').textContent=soundOn?'🔔':'🔕';
-  if(me){syncMe();const c=jget('vibe_inbox',null);if(c)renderInbox(c);loadInbox().catch(()=>{})}
+  if(me){syncMe();const c=jget('vibe_inbox',null);if(c)renderInbox(c);loadInbox().catch(()=>{});checkScript().then(warnScript)}
   setTimeout(()=>{$('eye').textContent="😉"},1200);
   setTimeout(()=>{$('splash').style.transform='translateY(-100%)';changePage(me?'inbox':'auth')},2000);
   const em=$('emojiPicker');
@@ -395,10 +399,14 @@ async function sendMsg(){
   i.value='';clearStage();$('emojiPicker').style.display='none';
   if('Notification'in window&&Notification.permission==='default')Notification.requestPermission().then(updNotifBtn);
   const b=$('btnSend');b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
-  if(img)await sendOne('[img]',img,i);
+  if(img&&!(await sendOne('[img]',img,i))){staged=img;$('stageImg').src=img;$('imgStage').style.display='flex';return}
   if(v)await sendOne(v,null,i);
 }
 async function sendOne(text,img,i){
+  if(img){ // chặn gửi ảnh khi script cũ, tránh lưu tin ảnh hỏng vào Sheet
+    if(scriptV!==1&&!(scriptV>=3))await checkScript();
+    if(!(scriptV>=3)){showErr('Không gửi được ảnh: script Google đang là bản CŨ. Dán Code.gs mới → chạy setup → Triển khai Phiên bản mới.',14000);return false}
+  }
   const id='p'+Date.now()+Math.random();
   pending.push({id,t:text,img,n:mineTotal()+pending.length+1,t0:Date.now()});renderChat();
   if(!img&&EMO.test(text))burst(text.match(EM1)[0]);
@@ -415,9 +423,10 @@ async function sendOne(text,img,i){
     }else await fetch(API,{method:'POST',mode:'no-cors',keepalive:true,body});
     setNet(true);
   }catch{setNet(false);fail='Mất kết nối mạng'}
-  if(fail){pending=pending.filter(x=>x.id!==id);shown=[];renderChat();if(img)showErr('Gửi ảnh không được: '+fail);else i.value=text;return}
+  if(fail){pending=pending.filter(x=>x.id!==id);shown=[];renderChat();if(img)showErr('Gửi ảnh không được: '+fail);else i.value=text;return false}
   wake();
   if(img)setTimeout(()=>{if(pending.some(x=>x.id===id)){pending=pending.filter(x=>x.id!==id);shown=[];renderChat();showErr('Ảnh chưa lên được server nên không lưu. Kiểm tra Code.gs đã triển khai Phiên bản mới và đã chạy setup chưa.')}},15000);
+  return true;
 }
 async function doTrans(btn){
   const out=btn.nextElementSibling,t=btn.parentElement.dataset.t;

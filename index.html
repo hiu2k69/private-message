@@ -32,7 +32,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 .av{width:44px;height:44px;border-radius:50%;background:var(--glass);display:grid;place-items:center;font-size:22px;border:1px solid var(--primary);box-shadow:0 0 12px #0004}
 .net{font-size:10px;color:#4ade80;display:block}
 .net::before{content:"●";margin-right:4px;animation:pulse 1.6s infinite}
-.net.off{color:#ff4b4b}.net.off::before{animation:none}
+.net.off{color:#ff4b4b}.net.gray{color:#888}.net.off::before,.net.gray::before{animation:none}
 @keyframes pulse{50%{opacity:.25}}
 .chat-scroll{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .row{display:flex;flex-direction:column;align-items:flex-start}
@@ -73,12 +73,14 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 .empty{text-align:center;color:#888;padding:40px 20px;font-size:14px;line-height:1.8}
 .theme-dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .2s}
 .theme-dot:hover{transform:scale(1.25)}.theme-dot.sel{border-color:#fff}
+#toast{position:fixed;top:calc(var(--safe-top) + 10px);left:0;right:0;margin:0 auto;width:calc(100% - 24px);max-width:476px;z-index:300;background:#1a1a20;border:1px solid var(--primary);border-radius:16px;padding:12px 14px;display:none;gap:12px;align-items:center;cursor:pointer;box-shadow:0 8px 30px #000a,0 0 16px var(--primary);animation:drop .4s cubic-bezier(.2,1.4,.4,1)}
+@keyframes drop{from{transform:translateY(-130%);opacity:0}}
 #loader{position:fixed;inset:0;background:#000e;z-index:10000;display:none;place-items:center;font-weight:800;color:var(--primary)}
 </style>
 </head>
 <body>
 <div class="universe" id="universe"></div>
-<div id="fxLayer"></div>
+<div id="fxLayer"></div><div id="toast"></div>
 <div id="splash"><div class="welcome-text" id="welcomeTxt"></div><div id="eye" class="bob" style="font-size:60px;margin-top:15px">😎</div></div>
 
 <div class="app-shell">
@@ -107,6 +109,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
       </div>
       <p style="font-size:11px;color:var(--primary);margin-bottom:8px">MÀU GIAO DIỆN</p>
       <div id="themeDots" style="display:flex;justify-content:center;gap:12px;margin-bottom:20px"></div>
+      <button class="btn-glow" id="btnNotif" onclick="askNotif()" style="margin-bottom:12px;background:#ffffff14;color:#fff">🔔 Bật thông báo</button>
       <button class="btn-glow" onclick="updateProfile()">LƯU THAY ĐỔI</button>
     </div>
   </div>
@@ -127,7 +130,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
     <div class="header">
       <span class="ic" onclick="changePage('inbox')" style="font-size:24px">←</span>
       <div id="peerAv" class="av">👤</div>
-      <div><b id="peerName">...</b><span class="net" id="net">Trực tuyến</span></div>
+      <div><b id="peerName">...</b><span class="net" id="net">Đang kiểm tra...</span></div>
     </div>
     <div id="chatBox" class="chat-scroll"></div>
     <button id="fab" onclick="toBottom()">⬇️</button>
@@ -152,7 +155,19 @@ const EMO=/^(?:\p{Extended_Pictographic}[\ufe0f]*){1,3}$/u, EM1=/\p{Extended_Pic
 let me=jget('vibe_cosmic_user',null), selectedAv="🤵", wake=()=>{}, loopId=0, boostUntil=0, soundOn=jget('vibe_snd',true), AC;
 
 /* ---- Mạng: no-store + timeout + trạng thái kết nối ---- */
-function setNet(ok){const n=$('net');n.classList.toggle('off',!ok);n.textContent=ok?'Trực tuyến':'Mất kết nối...'}
+let peerOn=null,netOk=true,inChat=false;
+function showNet(){const n=$('net');n.classList.toggle('off',!netOk);n.classList.toggle('gray',netOk&&peerOn===false);n.textContent=!netOk?'Mất kết nối...':peerOn?'Đang online':peerOn===false?'Offline':'Đang kiểm tra...'}
+const setNet=ok=>{netOk=ok;showNet()};
+/* Presence: tab đang mở & hiển thị mới tính là online (heartbeat 10s, server giữ 30s) */
+function beat(){
+  if(me&&inChat)loadInbox().catch(()=>{});   // đang trong chat vẫn biết có tin từ người khác
+  if(!me||document.hidden)return;
+  api({action:'ping',user:me.name,peer:inChat&&peer?peer.name:''}).then(d=>{if(inChat&&peer&&d&&typeof d.online==='boolean'){peerOn=d.online;showNet()}}).catch(()=>{});
+}
+const goOff=()=>{me&&fetch(API+'?'+new URLSearchParams({action:'offline',user:me.name}),{keepalive:true,mode:'no-cors'}).catch(()=>{})};
+setInterval(beat,10000);
+document.addEventListener('visibilitychange',()=>document.hidden?goOff():beat());
+addEventListener('pagehide',goOff);
 async function api(params,ms=8000){
   const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);
   try{const r=await fetch(API+'?'+new URLSearchParams(params),{signal:c.signal,cache:'no-store'});const d=await r.json();setNet(true);return d}
@@ -184,6 +199,28 @@ function burst(e){
     s.onanimationend=()=>s.remove();f.appendChild(s)}
   $('fxLayer').appendChild(f);
 }
+/* ---- Thông báo: toast trong app + thông báo hệ thống khi tab bị ẩn ---- */
+let toastT;
+function showToast(n,av,t){
+  const el=$('toast');el.innerHTML=`<div class="av" style="width:40px;height:40px;flex:none">${esc(av||'👤')}</div><div style="min-width:0"><b>${esc(n)}</b><div style="font-size:13px;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t)}</div></div>`;
+  el.style.display='flex';el.style.animation='none';void el.offsetWidth;el.style.animation='';
+  el.onclick=()=>{el.style.display='none';openChat(n,av||'')};
+  clearTimeout(toastT);toastT=setTimeout(()=>el.style.display='none',4500);
+}
+function notifyMsg(name,av,text){
+  ping();text=String(text).slice(0,120);
+  if(document.hidden){
+    if('Notification'in window&&Notification.permission==='granted')try{
+      const n=new Notification('💬 '+name,{body:text,tag:'vibe_'+name,renotify:true,icon:'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>${av||'💬'}</text></svg>`)});
+      n.onclick=()=>{window.focus();openChat(name,av||'');n.close()};
+    }catch{}
+  }else if(!(inChat&&peer&&peer.name===name))showToast(name,av,text);
+}
+function updNotifBtn(){
+  const b=$('btnNotif');if(!b)return;
+  b.textContent=!('Notification'in window)?'🚫 Trình duyệt không hỗ trợ':Notification.permission==='granted'?'✅ Thông báo đã bật':Notification.permission==='denied'?'🚫 Đã chặn (bật lại trong cài đặt trình duyệt)':'🔔 Bật thông báo';
+}
+function askNotif(){if('Notification'in window)Notification.requestPermission().then(updNotifBtn);else updNotifBtn()}
 function toggleSound(){soundOn=!soundOn;jset('vibe_snd',soundOn);$('snd').textContent=soundOn?'🔔':'🔕'}
 const THEMES=['#00f2fe','#ff6bcb','#7cff6b','#ffcc00','#b388ff'];
 function setTheme(c){document.documentElement.style.setProperty('--primary',c);jset('vibe_theme',c);document.querySelectorAll('.theme-dot').forEach(d=>d.classList.toggle('sel',d.dataset.c===c))}
@@ -196,7 +233,7 @@ window.onload=()=>{
   const box=$('welcomeTxt');
   "Welcome to VibeChat | AnhBaTalk".split('').forEach((c,i)=>{const s=document.createElement('span');s.textContent=c===' '?'\u00A0':c;s.style.animationDelay=`${i*.03}s`;box.appendChild(s)});
   THEMES.forEach(c=>{const d=document.createElement('div');d.className='theme-dot';d.dataset.c=c;d.style.background=c;d.onclick=()=>setTheme(c);$('themeDots').appendChild(d)});
-  setTheme(jget('vibe_theme',THEMES[0]));$('snd').textContent=soundOn?'🔔':'🔕';
+  setTheme(jget('vibe_theme',THEMES[0]));updNotifBtn();$('snd').textContent=soundOn?'🔔':'🔕';
   if(me){syncMe();const c=jget('vibe_inbox',null);if(c)renderInbox(c);loadInbox().catch(()=>{})}
   setTimeout(()=>{$('eye').textContent="😉"},1200);
   setTimeout(()=>{$('splash').style.transform='translateY(-100%)';changePage(me?'inbox':'auth')},2000);
@@ -210,7 +247,7 @@ window.onload=()=>{
   $('inboxList').addEventListener('click',e=>{const el=e.target.closest('.ib');if(el)openChat(el.dataset.name,el.dataset.av)});
 };
 function changePage(id){
-  stopLoop();
+  stopLoop();inChat=id==='chat';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   $('page'+id[0].toUpperCase()+id.slice(1)).classList.add('active');
   if(id==='inbox'){inboxSig='';renderInbox(jget('vibe_inbox',inboxData));startLoop(loadInbox,3000,3000)}
@@ -247,7 +284,7 @@ async function loadInbox(){
   const data=await api({action:'contacts',user:me.name});if(!Array.isArray(data))return;
   const first=localStorage.getItem('vibe_seen')===null,seen=jget('vibe_seen',{}),prev=inboxData;
   if(first){data.forEach(c=>{if(c.lastMsg)seen[c.name]=c.lastMsg});jset('vibe_seen',seen)}
-  else if(prev.length&&data.some(c=>{const o=prev.find(x=>x.name===c.name);return o&&o.lastMsg!==c.lastMsg&&c.lastMsg!==seen[c.name]}))ping();
+  else if(prev.length)data.forEach(c=>{const o=prev.find(x=>x.name===c.name);if(o&&c.name!==me.name&&o.lastMsg!==c.lastMsg&&c.lastMsg!==seen[c.name]&&!(inChat&&peer&&peer.name===c.name))notifyMsg(c.name,c.avatar,c.lastMsg)});
   jset('vibe_inbox',data);renderInbox(data);
 }
 function renderInbox(data){
@@ -267,11 +304,11 @@ function updUnread(){$('fab').innerHTML='⬇️'+(unread?`<b>${unread}</b>`:'');
 function toBottom(){const b=$('chatBox');b.scrollTo({top:b.scrollHeight,behavior:'smooth'});unread=0;updUnread()}
 
 function openChat(name,av){
-  peer={name,av,synced:false};msgs=jget(ck(),[]);pending=[];shown=[];unread=0;updUnread();
+  peer={name,av,synced:false};peerOn=null;showNet();msgs=jget(ck(),[]);pending=[];shown=[];unread=0;updUnread();
   $('chatBox').innerHTML='';$('peerName').textContent=name;$('peerAv').textContent=av||'👤';
   changePage('chat');renderChat();
   boostUntil=Date.now()+10000;
-  startLoop(syncMsgs,400,1200);           // 0.4s khi đang sôi nổi, 1.2s khi yên
+  startLoop(syncMsgs,400,1200);beat();           // 0.4s khi đang sôi nổi, 1.2s khi yên
 }
 async function syncMsgs(){
   const p=peer,data=await api({action:'messages',user:me.name,peer:p.name,since:msgs.length});
@@ -282,7 +319,7 @@ async function syncMsgs(){
   p.synced=true;if(data.length>msgs.length)boostUntil=Date.now()+15000;
   msgs=data;jset(ck(),data.slice(-100));renderChat();
   if(fresh.length){
-    ping();const l=String(fresh[fresh.length-1].message);
+    const l=String(fresh[fresh.length-1].message);notifyMsg(peer.name,peer.av,l);
     if(EMO.test(l.trim()))burst(l.match(EM1)[0]);
     if(document.hidden||!nearBottom()){unread+=fresh.length;updUnread()}
   }
@@ -315,6 +352,7 @@ function renderChat(){
 async function sendMsg(){
   const i=$('msgInput'),v=i.value.trim();if(!v||!peer)return;
   i.value='';$('emojiPicker').style.display='none';
+  if('Notification'in window&&Notification.permission==='default')Notification.requestPermission().then(updNotifBtn);
   const b=$('btnSend');b.classList.remove('fly');void b.offsetWidth;b.classList.add('fly');
   const id='p'+Date.now()+Math.random();
   pending.push({id,t:v,n:mineTotal()+pending.length+1});renderChat();

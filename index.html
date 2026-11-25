@@ -73,6 +73,11 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
 .empty{text-align:center;color:#888;padding:40px 20px;font-size:14px;line-height:1.8}
 .theme-dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .2s}
 .theme-dot:hover{transform:scale(1.25)}.theme-dot.sel{border-color:#fff}
+#pageSettings{overflow-y:auto}
+.av-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:8px;max-height:180px;overflow-y:auto;margin-bottom:12px;padding:4px}
+.avp{font-size:26px;height:44px;display:grid;place-items:center;border-radius:12px;cursor:pointer;background:#ffffff0d;border:2px solid transparent;transition:transform .2s}
+.avp:hover{transform:scale(1.2) rotate(-6deg)}.avp:active{transform:scale(.85)}
+.avp.sel{border-color:var(--primary);background:#ffffff1f;animation:boing .5s}
 #toast{position:fixed;top:calc(var(--safe-top) + 10px);left:0;right:0;margin:0 auto;width:calc(100% - 24px);max-width:476px;z-index:300;background:#1a1a20;border:1px solid var(--primary);border-radius:16px;padding:12px 14px;display:none;gap:12px;align-items:center;cursor:pointer;box-shadow:0 8px 30px #000a,0 0 16px var(--primary);animation:drop .4s cubic-bezier(.2,1.4,.4,1)}
 @keyframes drop{from{transform:translateY(-130%);opacity:0}}
 #loader{position:fixed;inset:0;background:#000e;z-index:10000;display:none;place-items:center;font-weight:800;color:var(--primary)}
@@ -92,9 +97,7 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
       <input type="password" id="pass" class="input-box" placeholder="Mật khẩu" autocomplete="current-password">
       <div id="regExtra" style="display:none;margin-bottom:15px">
         <p style="font-size:11px;color:var(--primary);margin-bottom:8px">CHỌN ICON ĐẠI DIỆN:</p>
-        <div style="display:flex;justify-content:center;gap:10px">
-          <span class="ic" style="font-size:26px" onclick="pickAv(this)">🤵</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">😎</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">🦁</span><span class="ic" style="font-size:26px" onclick="pickAv(this)">🐉</span>
-        </div>
+        <div class="av-grid" id="avGridR"></div>
       </div>
       <button class="btn-glow" id="btnAuth" onclick="handleAuth()">XÁC NHẬN</button>
     </div>
@@ -104,9 +107,9 @@ body{background:var(--bg);color:#fff;height:100dvh;overflow:hidden;display:flex;
     <div class="header"><span class="ic" onclick="changePage('inbox')" style="font-size:22px">←</span><b>Cài đặt</b></div>
     <div class="glass-card" style="margin-top:20px">
       <input type="text" id="newName" class="input-box" placeholder="Đổi tên hiển thị">
-      <div style="display:flex;justify-content:center;gap:15px;margin:16px 0">
-        <span class="ic" onclick="pickAv(this)" style="font-size:30px">🐱</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">👽</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">🤖</span><span class="ic" onclick="pickAv(this)" style="font-size:30px">💎</span>
-      </div>
+      <div id="avPrev" class="av bob" style="width:72px;height:72px;font-size:38px;margin:0 auto 12px">🤵</div>
+      <div class="av-grid" id="avGridS"></div>
+      <input id="avCustom" class="input-box" placeholder="Hoặc dán emoji của bạn..." oninput="customAv(this.value)" style="text-align:center">
       <p style="font-size:11px;color:var(--primary);margin-bottom:8px">MÀU GIAO DIỆN</p>
       <div id="themeDots" style="display:flex;justify-content:center;gap:12px;margin-bottom:20px"></div>
       <button class="btn-glow" id="btnNotif" onclick="askNotif()" style="margin-bottom:12px;background:#ffffff14;color:#fff">🔔 Bật thông báo</button>
@@ -233,7 +236,7 @@ window.onload=()=>{
   const box=$('welcomeTxt');
   "Welcome to VibeChat | AnhBaTalk".split('').forEach((c,i)=>{const s=document.createElement('span');s.textContent=c===' '?'\u00A0':c;s.style.animationDelay=`${i*.03}s`;box.appendChild(s)});
   THEMES.forEach(c=>{const d=document.createElement('div');d.className='theme-dot';d.dataset.c=c;d.style.background=c;d.onclick=()=>setTheme(c);$('themeDots').appendChild(d)});
-  setTheme(jget('vibe_theme',THEMES[0]));updNotifBtn();$('snd').textContent=soundOn?'🔔':'🔕';
+  setTheme(jget('vibe_theme',THEMES[0]));updNotifBtn();buildAv('avGridS');buildAv('avGridR');setAv(selectedAv);$('snd').textContent=soundOn?'🔔':'🔕';
   if(me){syncMe();const c=jget('vibe_inbox',null);if(c)renderInbox(c);loadInbox().catch(()=>{})}
   setTimeout(()=>{$('eye').textContent="😉"},1200);
   setTimeout(()=>{$('splash').style.transform='translateY(-100%)';changePage(me?'inbox':'auth')},2000);
@@ -248,6 +251,7 @@ window.onload=()=>{
 };
 function changePage(id){
   stopLoop();inChat=id==='chat';
+  if(id==='settings'&&me){setAv(me.avatar||selectedAv);$('avCustom').value='';$('newName').value=''}
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   $('page'+id[0].toUpperCase()+id.slice(1)).classList.add('active');
   if(id==='inbox'){inboxSig='';renderInbox(jget('vibe_inbox',inboxData));startLoop(loadInbox,3000,3000)}
@@ -271,9 +275,12 @@ async function handleAuth(){
 }
 function saveUser(){jset('vibe_cosmic_user',me);syncMe();$('loader').style.display='none';changePage('inbox')}
 function syncMe(){$('myAv').textContent=me.avatar;$('myName').textContent=me.name}
-function updateProfile(){const n=$('newName').value.trim();if(n)me.name=n;me.avatar=selectedAv;jset('vibe_cosmic_user',me);syncMe();changePage('inbox')}
+function updateProfile(){burst(selectedAv);const n=$('newName').value.trim();if(n)me.name=n;me.avatar=selectedAv;jset('vibe_cosmic_user',me);syncMe();changePage('inbox')}
 function logout(){localStorage.removeItem('vibe_cosmic_user');location.reload()}
-function pickAv(el){selectedAv=el.textContent;el.parentElement.querySelectorAll('.ic').forEach(d=>d.style.opacity='.5');el.style.opacity='1'}
+const AVS=['🤵','😎','🦁','🐉','🐱','👽','🤖','💎','🦊','🐼','🐯','🐨','🐸','🐵','🦄','🐧','🦉','🐙','🦋','🐢','👻','💀','🎃','🧙','🧛','🥷','👑','🌈','🔥','⚡','🍀','🌸','🍕','🎮','⚽','🚀'];
+function buildAv(id){const g=$(id);AVS.forEach(a=>{const d=document.createElement('div');d.className='avp';d.textContent=a;d.onclick=()=>setAv(a);g.appendChild(d)})}
+function setAv(a){selectedAv=a;document.querySelectorAll('.avp').forEach(d=>d.classList.toggle('sel',d.textContent===a));const pv=$('avPrev');if(pv)pv.textContent=a}
+function customAv(v){const m=v.match(EM1);if(m)setAv(m[0])}
 function newChat(){const n=(prompt('Nhập tên người muốn nhắn tin:')||'').trim();if(n&&n!==me.name)openChat(n,'')}
 function toggleEmoji(){const p=$('emojiPicker');p.style.display=p.style.display==='grid'?'none':'grid'}
 
